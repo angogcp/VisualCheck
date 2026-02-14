@@ -49,6 +49,52 @@
     <!-- トースト通知 -->
     <div id="toast-container"></div>
 
+    <!-- ── 共通画像ビューアモーダル ── -->
+    <div class="viewer-overlay" id="viewer-overlay" onclick="closeViewer()">
+        <div class="viewer-container" onclick="event.stopPropagation()">
+            <button class="viewer-close" onclick="closeViewer()" title="閉じる (Esc)">✕</button>
+            <button class="viewer-nav viewer-prev" onclick="viewerNavigate(-1)" title="前の画像 (←)">‹</button>
+            <div class="viewer-image-wrap">
+                <img id="viewer-image" src="" alt="プレビュー">
+            </div>
+            <button class="viewer-nav viewer-next" onclick="viewerNavigate(1)" title="次の画像 (→)">›</button>
+            <div class="viewer-footer">
+                <div class="viewer-info">
+                    <span class="viewer-label" id="viewer-label"></span>
+                    <span class="viewer-filename" id="viewer-filename"></span>
+                    <span class="viewer-counter" id="viewer-counter"></span>
+                </div>
+
+                <!-- AI連携 -->
+                <div class="viewer-ai-section" style="margin: 0 1rem;">
+                    <button id="btn-analyze" class="btn btn-analyze"
+                        style="background:#5c6bc0; color:white; border:none; padding:0.5rem 1rem; border-radius:4px; cursor:pointer;">🤖
+                        AI判定</button>
+                    <div id="ai-result-container" class="ai-result"
+                        style="display:none; margin-left:1rem; align-items:center; gap:0.5rem;">
+                        <span id="ai-label-value" class="ai-label-pill"
+                            style="padding:0.25rem 0.5rem; border-radius:4px; font-weight:bold;"></span>
+                        <span id="ai-score-value" class="ai-score-text"
+                            style="font-family:monospace; font-weight:bold;"></span>
+                    </div>
+                </div>
+
+                <div class="viewer-actions">
+                    <button class="btn btn-viewer-ok" onclick="viewerLabel('ok')">
+                        <span>✓</span> OK
+                    </button>
+                    <button class="btn btn-viewer-ng" onclick="viewerLabel('ng')">
+                        <span>✗</span> NG
+                    </button>
+                    <button class="btn btn-viewer-delete" onclick="viewerDelete()">
+                        <span>🗑</span> 削除
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/viewer.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>

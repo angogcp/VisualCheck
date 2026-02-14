@@ -92,15 +92,15 @@
                 <div class="gallery-grid" id="gallery-grid">
                     {% for img in recent %}
                     <div class="gallery-item" data-filepath="{{ img.filepath }}"
-                        onclick="openViewer('{{ img.filepath | replace('\\', '\\\\') }}')">
+                        onclick="openViewer(this.dataset.filepath)">
                         <img src="/image?path={{ img.filepath | urlencode }}" alt="{{ img.filename }}" loading="lazy">
                         <div class="gallery-label label-{{ img.label }}">{{ img.label | upper }}</div>
                         <div class="gallery-actions">
                             <button class="btn-label btn-ok"
-                                onclick="event.stopPropagation(); labelImage('{{ img.filepath | replace('\\', '\\\\') }}', 'ok')"
+                                onclick="event.stopPropagation(); labelImage(this.closest('.gallery-item').dataset.filepath, 'ok')"
                                 title="OK判定">✓</button>
                             <button class="btn-label btn-ng"
-                                onclick="event.stopPropagation(); labelImage('{{ img.filepath | replace('\\', '\\\\') }}', 'ng')"
+                                onclick="event.stopPropagation(); labelImage(this.closest('.gallery-item').dataset.filepath, 'ng')"
                                 title="NG判定">✗</button>
                         </div>
                     </div>
@@ -117,32 +117,7 @@
         </aside>
     </main>
 
-    <!-- ── 画像ビューアモーダル ── -->
-    <div class="viewer-overlay" id="viewer-overlay" onclick="closeViewer()">
-        <div class="viewer-container" onclick="event.stopPropagation()">
-            <button class="viewer-close" onclick="closeViewer()" title="閉じる (Esc)">✕</button>
-            <button class="viewer-nav viewer-prev" onclick="viewerNavigate(-1)" title="前の画像 (←)">‹</button>
-            <div class="viewer-image-wrap">
-                <img id="viewer-image" src="" alt="プレビュー">
-            </div>
-            <button class="viewer-nav viewer-next" onclick="viewerNavigate(1)" title="次の画像 (→)">›</button>
-            <div class="viewer-footer">
-                <div class="viewer-info">
-                    <span class="viewer-label" id="viewer-label"></span>
-                    <span class="viewer-filename" id="viewer-filename"></span>
-                    <span class="viewer-counter" id="viewer-counter"></span>
-                </div>
-                <div class="viewer-actions">
-                    <button class="btn btn-viewer-ok" onclick="viewerLabel('ok')">
-                        <span>✓</span> OK
-                    </button>
-                    <button class="btn btn-viewer-ng" onclick="viewerLabel('ng')">
-                        <span>✗</span> NG
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+
 
 </div>
 {% endblock %}

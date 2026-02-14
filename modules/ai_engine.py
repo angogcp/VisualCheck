@@ -170,7 +170,7 @@ class AIEngine:
                 return {
                     "score": float(predictions.pred_score),
                     "label": "ng" if predictions.pred_score > 0.5 else "ok",
-                    "heatmap": predictions.heat_map
+                    "heatmap": None # TODO: unexpected serialization error with numpy array
                 }
             except Exception as e:
                 return {"error": str(e)}
@@ -202,19 +202,19 @@ class AIEngine:
                 # Actually, check attribute 'pred_score' if output is an object, or if tuple
                 # For now just return the raw score if possible
                 
-                if isinstance(output, torch.Tensor):
-                     # If scalar, it's score? Or map?
+                if isinstance(output, tuple):
+                     # (anomaly_map, pred_score)
+                     if len(output) > 1:
+                         score = output[1].item()
+                     else:
+                         score = output[0].max().item()
+                elif isinstance(output, torch.Tensor):
                      if output.numel() == 1:
                          score = output.item()
                      else:
-                         # Likely anomaly map
-                         score = getattr(output, "max", lambda: 0.0)().item() if hasattr(output, "max") else 0.0
-                         # TODO: Generate heatmap from map
+                         score = output.max().item()
                 elif hasattr(output, "pred_score"):
                      score = output.pred_score.item()
-                elif isinstance(output, tuple):
-                     # (anomaly_map, pred_score) ??
-                     score = 0.5 # Placeholder
                 
                 return {
                     "score": score,

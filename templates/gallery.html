@@ -56,35 +56,7 @@
         <span class="pagination-info" id="pagination-info"></span>
     </div>
 
-    <!-- ── 画像ビューアモーダル ── -->
-    <div class="viewer-overlay" id="viewer-overlay" onclick="closeViewer()">
-        <div class="viewer-container" onclick="event.stopPropagation()">
-            <button class="viewer-close" onclick="closeViewer()" title="閉じる (Esc)">✕</button>
-            <button class="viewer-nav viewer-prev" onclick="viewerNavigate(-1)" title="前の画像 (←)">‹</button>
-            <div class="viewer-image-wrap">
-                <img id="viewer-image" src="" alt="プレビュー">
-            </div>
-            <button class="viewer-nav viewer-next" onclick="viewerNavigate(1)" title="次の画像 (→)">›</button>
-            <div class="viewer-footer">
-                <div class="viewer-info">
-                    <span class="viewer-label" id="viewer-label"></span>
-                    <span class="viewer-filename" id="viewer-filename"></span>
-                    <span class="viewer-counter" id="viewer-counter"></span>
-                </div>
-                <div class="viewer-actions">
-                    <button class="btn btn-viewer-ok" onclick="viewerLabel('ok')">
-                        <span>✓</span> OK
-                    </button>
-                    <button class="btn btn-viewer-ng" onclick="viewerLabel('ng')">
-                        <span>✗</span> NG
-                    </button>
-                    <button class="btn btn-viewer-delete" onclick="viewerDelete()">
-                        <span>🗑</span> 削除
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+
 
     <!-- ── 削除確認ダイアログ ── -->
     <div class="confirm-overlay" id="confirm-overlay">

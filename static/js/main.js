@@ -136,16 +136,21 @@ async function labelImage(filepath, label) {
 
 // ── ギャラリー更新 ──
 
-// グローバル: ギャラリーの画像データを保持
-let galleryImages = [];
+// ── ギャラリー更新 ──
+
+// グローバル: ギャラリーの画像データを保持 (viewer.js と共有)
+window.galleryImages = [];
 
 async function refreshGallery() {
+    // キャプチャページのみギャラリー(最近の撮影)がある
+    const grid = document.getElementById('gallery-grid');
+    if (!grid) return;
+
     try {
         const response = await fetch('/gallery?n=24');
-        galleryImages = await response.json();
-        const grid = document.getElementById('gallery-grid');
+        window.galleryImages = await response.json();
 
-        if (galleryImages.length === 0) {
+        if (window.galleryImages.length === 0) {
             grid.innerHTML = `
                 <div class="gallery-empty">
                     <p>まだ撮影がありません</p>
@@ -155,20 +160,21 @@ async function refreshGallery() {
             return;
         }
 
-        grid.innerHTML = galleryImages.map((img, index) => {
+        grid.innerHTML = window.galleryImages.map((img, index) => {
             const imgSrc = `/image?path=${encodeURIComponent(img.filepath)}`;
-            const escapedPath = img.filepath.replace(/\\/g, '\\\\');
+            // view.js の openViewer を使用
+            // エスケープ不要、dataset経由で渡す (HTML側で修正済み)
             return `
                 <div class="gallery-item" data-filepath="${img.filepath}"
-                     onclick="openViewer('${escapedPath}')">
+                     onclick="openViewer(this.dataset.filepath)">
                     <img src="${imgSrc}" alt="${img.filename}" loading="lazy">
                     <div class="gallery-label label-${img.label}">${img.label.toUpperCase()}</div>
                     <div class="gallery-actions">
                         <button class="btn-label btn-ok"
-                                onclick="event.stopPropagation(); labelImage('${escapedPath}', 'ok')"
+                                onclick="event.stopPropagation(); labelImage(this.closest('.gallery-item').dataset.filepath, 'ok')"
                                 title="OK判定">✓</button>
                         <button class="btn-label btn-ng"
-                                onclick="event.stopPropagation(); labelImage('${escapedPath}', 'ng')"
+                                onclick="event.stopPropagation(); labelImage(this.closest('.gallery-item').dataset.filepath, 'ng')"
                                 title="NG判定">✗</button>
                     </div>
                 </div>
@@ -186,168 +192,21 @@ async function refreshStats() {
         const response = await fetch('/stats');
         const stats = await response.json();
 
-        document.getElementById('stat-ok').textContent = stats.ok;
-        document.getElementById('stat-ng').textContent = stats.ng;
-        document.getElementById('stat-unlabeled').textContent = stats.unlabeled;
-        document.getElementById('stat-total').textContent = stats.total;
+        const ids = ['stat-ok', 'stat-ng', 'stat-unlabeled', 'stat-total'];
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = stats[id.replace('stat-', '')];
+        });
     } catch (err) {
         console.error('Stats refresh failed:', err);
     }
 }
 
-// ── 画像ビューア ──
-
-let viewerCurrentIndex = -1;
-let viewerIsOpen = false;
-
-function openViewer(filepath) {
-    // ギャラリー画像からインデックスを検索
-    const normalizedPath = filepath.replace(/\\\\/g, '\\');
-    const index = galleryImages.findIndex(img => {
-        const imgPath = img.filepath.replace(/\\\\/g, '\\');
-        return imgPath === normalizedPath;
-    });
-
-    if (index === -1) {
-        // ギャラリーにない場合は直接表示
-        showViewerImage(filepath, '', '', 0, 0);
-    } else {
-        viewerCurrentIndex = index;
-        const img = galleryImages[index];
-        showViewerImage(
-            img.filepath,
-            img.label,
-            img.filename,
-            index + 1,
-            galleryImages.length
-        );
-    }
-
-    const overlay = document.getElementById('viewer-overlay');
-    overlay.classList.add('active');
-    viewerIsOpen = true;
-    document.body.style.overflow = 'hidden';
-}
-
-function showViewerImage(filepath, label, filename, current, total) {
-    const viewerImg = document.getElementById('viewer-image');
-    const viewerLabel = document.getElementById('viewer-label');
-    const viewerFilename = document.getElementById('viewer-filename');
-    const viewerCounter = document.getElementById('viewer-counter');
-
-    viewerImg.src = `/image?path=${encodeURIComponent(filepath)}`;
-    viewerImg.dataset.filepath = filepath;
-
-    // ラベル表示
-    if (label) {
-        viewerLabel.textContent = label.toUpperCase();
-        viewerLabel.className = 'viewer-label';
-        if (label === 'ok') {
-            viewerLabel.style.background = 'rgba(0, 230, 118, 0.1)';
-            viewerLabel.style.color = '#00e676';
-            viewerLabel.style.border = '1px solid rgba(0, 230, 118, 0.3)';
-        } else if (label === 'ng') {
-            viewerLabel.style.background = 'rgba(255, 82, 82, 0.1)';
-            viewerLabel.style.color = '#ff5252';
-            viewerLabel.style.border = '1px solid rgba(255, 82, 82, 0.3)';
-        } else {
-            viewerLabel.style.background = 'rgba(255, 193, 7, 0.1)';
-            viewerLabel.style.color = '#ffc107';
-            viewerLabel.style.border = '1px solid rgba(255, 193, 7, 0.3)';
-        }
-    } else {
-        viewerLabel.textContent = '';
-    }
-
-    viewerFilename.textContent = filename || '';
-    viewerCounter.textContent = total > 0 ? `${current} / ${total}` : '';
-}
-
-function closeViewer() {
-    const overlay = document.getElementById('viewer-overlay');
-    overlay.classList.remove('active');
-    viewerIsOpen = false;
-    document.body.style.overflow = '';
-}
-
-function viewerNavigate(direction) {
-    if (galleryImages.length === 0) return;
-
-    viewerCurrentIndex += direction;
-    if (viewerCurrentIndex < 0) viewerCurrentIndex = galleryImages.length - 1;
-    if (viewerCurrentIndex >= galleryImages.length) viewerCurrentIndex = 0;
-
-    const img = galleryImages[viewerCurrentIndex];
-    showViewerImage(
-        img.filepath,
-        img.label,
-        img.filename,
-        viewerCurrentIndex + 1,
-        galleryImages.length
-    );
-}
-
-async function viewerLabel(label) {
-    const viewerImg = document.getElementById('viewer-image');
-    const filepath = viewerImg.dataset.filepath;
-    if (!filepath) return;
-
-    try {
-        const response = await fetch('/label', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ filepath, label }),
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            const labelJa = label === 'ok' ? 'OK' : 'NG';
-            showToast(`✓ ${labelJa} に分類しました`, label === 'ok' ? 'success' : 'error');
-
-            // ギャラリーデータを更新
-            if (viewerCurrentIndex >= 0 && viewerCurrentIndex < galleryImages.length) {
-                galleryImages[viewerCurrentIndex].label = label;
-                galleryImages[viewerCurrentIndex].filepath = data.new_filepath;
-            }
-
-            // ビューア表示を更新
-            showViewerImage(
-                data.new_filepath,
-                label,
-                galleryImages[viewerCurrentIndex]?.filename || '',
-                viewerCurrentIndex + 1,
-                galleryImages.length
-            );
-
-            viewerImg.dataset.filepath = data.new_filepath;
-
-            // ギャラリーと統計も更新
-            refreshGallery();
-            refreshStats();
-        } else {
-            showToast(`✗ ラベル変更失敗: ${data.error}`, 'error');
-        }
-    } catch (err) {
-        showToast(`✗ エラー: ${err.message}`, 'error');
-    }
-}
-
-// ── キーボードショートカット ──
+// ── キーボードショートカット (撮影のみ) ──
 
 document.addEventListener('keydown', (e) => {
-    if (viewerIsOpen) {
-        if (e.code === 'Escape') {
-            closeViewer();
-        } else if (e.code === 'ArrowLeft') {
-            e.preventDefault();
-            viewerNavigate(-1);
-        } else if (e.code === 'ArrowRight') {
-            e.preventDefault();
-            viewerNavigate(1);
-        }
-        return;
-    }
+    // ビューアが開いているときは何もしない (viewer.js が処理)
+    if (document.body.style.overflow === 'hidden') return;
 
     if (e.code === 'Space' && document.activeElement.tagName !== 'INPUT') {
         e.preventDefault();
@@ -358,7 +217,10 @@ document.addEventListener('keydown', (e) => {
 // ── 初期化 ──
 
 document.addEventListener('DOMContentLoaded', () => {
-    initCamera();
+    // カメラ要素がある場合のみ初期化
+    if (document.getElementById('live-preview')) {
+        initCamera();
+    }
     refreshGallery();
     setInterval(refreshStats, 30000);
 });

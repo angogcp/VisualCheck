@@ -38,6 +38,8 @@ function debounceSearch() {
 
 // ── ギャラリー読み込み ──
 
+// ── ギャラリー読み込み ──
+
 async function loadGallery(reset = false) {
     const grid = document.getElementById('gallery-full-grid');
     const loading = document.getElementById('gallery-loading');
@@ -45,7 +47,7 @@ async function loadGallery(reset = false) {
 
     if (reset) {
         grid.innerHTML = '';
-        galleryImages = [];
+        window.galleryImages = [];
         currentOffset = 0;
         grid.appendChild(loading);
         loading.style.display = 'flex';
@@ -76,10 +78,10 @@ async function loadGallery(reset = false) {
             total = data.total;
         }
 
-        if (reset) galleryImages = [];
-        galleryImages = galleryImages.concat(images);
+        if (reset) window.galleryImages = [];
+        window.galleryImages = window.galleryImages.concat(images);
 
-        if (galleryImages.length === 0 && reset) {
+        if (window.galleryImages.length === 0 && reset) {
             grid.innerHTML = `
                 <div class="gallery-empty-full">
                     <div class="empty-icon">🔍</div>
@@ -94,7 +96,7 @@ async function loadGallery(reset = false) {
         // 画像カードを追加
         const fragment = document.createDocumentFragment();
         images.forEach((img, i) => {
-            const index = reset ? i : (galleryImages.length - images.length + i);
+            const index = reset ? i : (window.galleryImages.length - images.length + i);
             const card = createGalleryCard(img, index);
             fragment.appendChild(card);
         });
@@ -104,7 +106,7 @@ async function loadGallery(reset = false) {
         if (hasMore) {
             pagination.style.display = 'flex';
             document.getElementById('pagination-info').textContent =
-                `${galleryImages.length} / ${total} 件表示中`;
+                `${window.galleryImages.length} / ${total} 件表示中`;
             currentOffset += PAGE_SIZE;
         } else {
             pagination.style.display = 'none';
@@ -132,11 +134,14 @@ function createGalleryCard(img, index) {
     div.dataset.filepath = img.filepath;
     div.dataset.index = index;
 
-    const escapedPath = img.filepath.replace(/\\/g, '\\\\');
     const imgSrc = `/image?path=${encodeURIComponent(img.filepath)}`;
 
+    // view.js の openViewer を使用 (escapedPathはラベル用のみに残すか、datasetから取得するか)
+    // ここでは onclick で this.closest... を使う方が安全
+    const escapedPath = img.filepath.replace(/\\/g, '\\\\');
+
     div.innerHTML = `
-        <div class="gallery-thumb" onclick="openGalleryViewer(${index})">
+        <div class="gallery-thumb" onclick="openViewer(this.closest('.gallery-item-full').dataset.filepath)">
             <img src="${imgSrc}" alt="${img.filename}" loading="lazy">
             <div class="gallery-label label-${img.label}">${img.label.toUpperCase()}</div>
         </div>
@@ -184,8 +189,15 @@ async function galleryLabel(filepath, label, btn) {
 
 // ── 削除 ──
 
-function requestDelete(filepath) {
-    pendingDeletePath = filepath.replace(/\\\\/g, '\\');
+// window.requestDelete として公開 (viewer.js から利用可能にする)
+window.requestDelete = function (filepath) {
+    pendingDeletePath = filepath.replace(/\\\\/g, '\\'); // エスケープ解除処理?? 逆?
+    // filepath が既定のエスケープ済み文字列で来る場合と、生で来る場合がある
+    // dataset.filepath は生。
+    // 引数がどう来るか次第。viewer.js からは 生で来るはず(replaceしてるが)
+    // ここではシンプルに受け取る
+
+    pendingDeletePath = filepath;
     const filename = pendingDeletePath.split(/[\\/]/).pop();
     document.getElementById('confirm-filename').textContent = filename;
     document.getElementById('confirm-overlay').classList.add('active');
@@ -217,37 +229,6 @@ async function confirmDelete() {
     } catch (err) {
         showToast(`✗ エラー: ${err.message}`, 'error');
     }
-}
-
-// ── ビューア（ギャラリーページ用） ──
-
-function openGalleryViewer(index) {
-    if (index < 0 || index >= galleryImages.length) return;
-
-    viewerCurrentIndex = index;
-    const img = galleryImages[index];
-    showViewerImage(
-        img.filepath,
-        img.label,
-        img.filename,
-        index + 1,
-        galleryImages.length
-    );
-
-    const overlay = document.getElementById('viewer-overlay');
-    overlay.classList.add('active');
-    viewerIsOpen = true;
-    document.body.style.overflow = 'hidden';
-}
-
-// ── ビューアから削除 ──
-
-function viewerDelete() {
-    const viewerImg = document.getElementById('viewer-image');
-    const filepath = viewerImg.dataset.filepath;
-    if (!filepath) return;
-    requestDelete(filepath.replace(/\\/g, '\\\\'));
-    closeViewer();
 }
 
 // ── 統計更新 ──
