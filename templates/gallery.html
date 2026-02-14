@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-container">
+
+    <!-- ── ページヘッダー ── -->
+    <div class="page-header">
+        <div class="page-header-left">
+            <h1>🖼️ ギャラリー</h1>
+            <span class="page-header-sub">撮影画像の管理・ラベル付け</span>
+        </div>
+        <div class="page-header-right">
+            <div class="gallery-stats-mini">
+                <span class="mini-stat stat-ok-text"><strong id="g-stat-ok">{{ stats.ok }}</strong> OK</span>
+                <span class="mini-stat stat-ng-text"><strong id="g-stat-ng">{{ stats.ng }}</strong> NG</span>
+                <span class="mini-stat stat-unlabeled-text"><strong id="g-stat-unlabeled">{{ stats.unlabeled }}</strong>
+                    未分類</span>
+                <span class="mini-stat stat-total-text"><strong id="g-stat-total">{{ stats.total }}</strong> 合計</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── フィルタ・検索バー ── -->
+    <div class="filter-bar card glass-card">
+        <div class="filter-tabs" id="filter-tabs">
+            <button class="filter-tab active" data-label="" onclick="setFilter('')">すべて</button>
+            <button class="filter-tab" data-label="ok" onclick="setFilter('ok')">
+                <span class="filter-dot dot-ok"></span> OK
+            </button>
+            <button class="filter-tab" data-label="ng" onclick="setFilter('ng')">
+                <span class="filter-dot dot-ng"></span> NG
+            </button>
+            <button class="filter-tab" data-label="unlabeled" onclick="setFilter('unlabeled')">
+                <span class="filter-dot dot-unlabeled"></span> 未分類
+            </button>
+        </div>
+        <div class="filter-search">
+            <input type="text" id="search-cable-id" placeholder="ケーブルID検索..." autocomplete="off"
+                oninput="debounceSearch()">
+        </div>
+    </div>
+
+    <!-- ── 画像グリッド ── -->
+    <div class="gallery-full-grid" id="gallery-full-grid">
+        <div class="gallery-loading" id="gallery-loading">
+            <div class="spinner"></div>
+            <p>読み込み中...</p>
+        </div>
+    </div>
+
+    <!-- ── ページネーション ── -->
+    <div class="pagination" id="pagination" style="display:none;">
+        <button class="btn btn-page" id="btn-load-more" onclick="loadMore()">
+            もっと表示
+        </button>
+        <span class="pagination-info" id="pagination-info"></span>
+    </div>
+
+    <!-- ── 画像ビューアモーダル ── -->
+    <div class="viewer-overlay" id="viewer-overlay" onclick="closeViewer()">
+        <div class="viewer-container" onclick="event.stopPropagation()">
+            <button class="viewer-close" onclick="closeViewer()" title="閉じる (Esc)">✕</button>
+            <button class="viewer-nav viewer-prev" onclick="viewerNavigate(-1)" title="前の画像 (←)">‹</button>
+            <div class="viewer-image-wrap">
+                <img id="viewer-image" src="" alt="プレビュー">
+            </div>
+            <button class="viewer-nav viewer-next" onclick="viewerNavigate(1)" title="次の画像 (→)">›</button>
+            <div class="viewer-footer">
+                <div class="viewer-info">
+                    <span class="viewer-label" id="viewer-label"></span>
+                    <span class="viewer-filename" id="viewer-filename"></span>
+                    <span class="viewer-counter" id="viewer-counter"></span>
+                </div>
+                <div class="viewer-actions">
+                    <button class="btn btn-viewer-ok" onclick="viewerLabel('ok')">
+                        <span>✓</span> OK
+                    </button>
+                    <button class="btn btn-viewer-ng" onclick="viewerLabel('ng')">
+                        <span>✗</span> NG
+                    </button>
+                    <button class="btn btn-viewer-delete" onclick="viewerDelete()">
+                        <span>🗑</span> 削除
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── 削除確認ダイアログ ── -->
+    <div class="confirm-overlay" id="confirm-overlay">
+        <div class="confirm-dialog card glass-card">
+            <h3>⚠️ 画像を削除しますか？</h3>
+            <p id="confirm-filename"></p>
+            <p class="confirm-warn">この操作は取り消せません</p>
+            <div class="confirm-actions">
+                <button class="btn btn-cancel" onclick="cancelDelete()">キャンセル</button>
+                <button class="btn btn-confirm-delete" onclick="confirmDelete()">削除する</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/gallery.js') }}"></script>
+{% endblock %}

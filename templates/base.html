@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QC-Check 02 | 画像検査ステーション</title>
+    <meta name="description" content="特殊ケーブル製造 AI画像検査 キャプチャステーション">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+    <!-- ── ナビゲーション ── -->
+    <nav class="main-nav">
+        <div class="nav-inner">
+            <div class="nav-brand">
+                <div class="logo-mark-sm">QC</div>
+                <span class="nav-title">QC-Check 02</span>
+            </div>
+            <div class="nav-links">
+                <a href="/" class="nav-link {% if active_page == 'capture' %}active{% endif %}">
+                    <span class="nav-icon">📷</span>
+                    <span>キャプチャ</span>
+                </a>
+                <a href="/gallery-page" class="nav-link {% if active_page == 'gallery' %}active{% endif %}">
+                    <span class="nav-icon">🖼️</span>
+                    <span>ギャラリー</span>
+                </a>
+                <a href="/reports" class="nav-link {% if active_page == 'reports' %}active{% endif %}">
+                    <span class="nav-icon">📊</span>
+                    <span>レポート</span>
+                </a>
+            </div>
+            <div class="nav-actions">
+                <a href="/export" class="nav-btn" title="CSVダウンロード">
+                    <span>📥</span> エクスポート
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    {% block content %}{% endblock %}
+
+    <!-- トースト通知 -->
+    <div id="toast-container"></div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

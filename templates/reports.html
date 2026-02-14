@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-container">
+
+    <!-- ── ページヘッダー ── -->
+    <div class="page-header">
+        <div class="page-header-left">
+            <h1>📊 検査レポート</h1>
+            <span class="page-header-sub">日別検査統計・品質トレンド</span>
+        </div>
+    </div>
+
+    <!-- ── 本日のサマリー ── -->
+    <div class="report-summary">
+        <div class="card glass-card summary-card summary-total">
+            <div class="summary-icon">📋</div>
+            <div class="summary-value" id="today-total">0</div>
+            <div class="summary-label">本日の検査数</div>
+        </div>
+        <div class="card glass-card summary-card summary-ok">
+            <div class="summary-icon">✓</div>
+            <div class="summary-value" id="today-ok">0</div>
+            <div class="summary-label">OK</div>
+        </div>
+        <div class="card glass-card summary-card summary-ng">
+            <div class="summary-icon">✗</div>
+            <div class="summary-value" id="today-ng">0</div>
+            <div class="summary-label">NG</div>
+        </div>
+        <div class="card glass-card summary-card summary-rate">
+            <div class="summary-icon">📈</div>
+            <div class="summary-value" id="today-rate">—</div>
+            <div class="summary-label">合格率</div>
+        </div>
+    </div>
+
+    <!-- ── 合格率バー ── -->
+    <div class="card glass-card pass-rate-card">
+        <div class="card-header">
+            <h2>本日の合格率</h2>
+        </div>
+        <div class="pass-rate-bar-container">
+            <div class="pass-rate-bar">
+                <div class="pass-rate-fill" id="pass-rate-fill" style="width: 0%"></div>
+            </div>
+            <div class="pass-rate-labels">
+                <span class="rate-label-ok">OK: <strong id="rate-ok-count">0</strong></span>
+                <span class="rate-label-ng">NG: <strong id="rate-ng-count">0</strong></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="report-grid">
+        <!-- ── 日別履歴テーブル ── -->
+        <div class="card glass-card history-card">
+            <div class="card-header">
+                <h2>📅 日別検査履歴（直近30日）</h2>
+            </div>
+            <div class="history-table-wrap">
+                <table class="history-table" id="history-table">
+                    <thead>
+                        <tr>
+                            <th>日付</th>
+                            <th>OK</th>
+                            <th>NG</th>
+                            <th>未分類</th>
+                            <th>合計</th>
+                            <th>合格率</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-tbody">
+                        {% for day in daily %}
+                        <tr>
+                            <td class="date-cell">{{ day.date }}</td>
+                            <td class="ok-cell">{{ day.ok }}</td>
+                            <td class="ng-cell">{{ day.ng }}</td>
+                            <td class="unlabeled-cell">{{ day.unlabeled }}</td>
+                            <td class="total-cell">{{ day.total }}</td>
+                            <td class="rate-cell">
+                                {% if day.ok + day.ng > 0 %}
+                                {{ "%.1f" | format(day.ok / (day.ok + day.ng) * 100) }}%
+                                {% else %}
+                                —
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if not daily %}
+                        <tr>
+                            <td colspan="6" class="empty-row">データがありません</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ── 累計統計 ── -->
+        <div class="card glass-card cumulative-card">
+            <div class="card-header">
+                <h2>📈 累計統計</h2>
+            </div>
+            <div class="cumulative-stats">
+                <div class="cum-stat">
+                    <div class="cum-value stat-ok-text">{{ stats.ok }}</div>
+                    <div class="cum-label">OK合計</div>
+                </div>
+                <div class="cum-stat">
+                    <div class="cum-value stat-ng-text">{{ stats.ng }}</div>
+                    <div class="cum-label">NG合計</div>
+                </div>
+                <div class="cum-stat">
+                    <div class="cum-value stat-unlabeled-text">{{ stats.unlabeled }}</div>
+                    <div class="cum-label">未分類</div>
+                </div>
+                <div class="cum-stat">
+                    <div class="cum-value" style="color: var(--text-primary);">{{ stats.total }}</div>
+                    <div class="cum-label">総検査数</div>
+                </div>
+                <div class="cum-stat cum-rate">
+                    <div class="cum-value" style="color: var(--accent-blue);">
+                        {% if stats.ok + stats.ng > 0 %}
+                        {{ "%.1f" | format(stats.ok / (stats.ok + stats.ng) * 100) }}%
+                        {% else %}
+                        —
+                        {% endif %}
+                    </div>
+                    <div class="cum-label">累計合格率</div>
+                </div>
+            </div>
+
+            <!-- ── 最近のNG画像 ── -->
+            <div class="recent-ng-section">
+                <h3 class="section-subtitle">⚠️ 最近のNG画像</h3>
+                <div class="recent-ng-grid" id="recent-ng-grid">
+                    <!-- JS で動的に読み込み -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/reports.js') }}"></script>
+{% endblock %}

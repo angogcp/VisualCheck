@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="app-container">
+
+    <!-- ── ヘッダー ── -->
+    <header class="app-header">
+        <div class="header-left">
+            <div class="header-text">
+                <h1>画像検査ステーション</h1>
+                <span class="header-sub">Phase 1 キャプチャ</span>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="camera-status" id="camera-status">
+                <span class="status-dot"></span>
+                <span id="status-text">カメラ接続中...</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- ── メインコンテンツ ── -->
+    <main class="main-grid">
+
+        <!-- 左: ライブプレビュー + 撮影 -->
+        <section class="preview-section">
+            <div class="card glass-card">
+                <div class="card-header">
+                    <h2>📷 ライブプレビュー</h2>
+                </div>
+                <div class="preview-container">
+                    <video id="live-preview" autoplay playsinline muted></video>
+                    <canvas id="capture-canvas" style="display:none;"></canvas>
+                    <div class="preview-overlay" id="capture-flash"></div>
+                    <div class="camera-fallback" id="camera-fallback" style="display:none;">
+                        <div class="fallback-icon">📷</div>
+                        <p>カメラが接続されていません</p>
+                        <p class="fallback-sub">Webカメラを接続してページを更新してください</p>
+                    </div>
+                </div>
+                <div class="capture-controls">
+                    <div class="cable-id-input">
+                        <label for="cable-id">ケーブルID:</label>
+                        <input type="text" id="cable-id" placeholder="例: CABLE-001" autocomplete="off">
+                    </div>
+                    <button id="capture-btn" class="btn btn-capture" onclick="captureImage()">
+                        <span class="btn-icon">📸</span>
+                        <span class="btn-text">撮影</span>
+                    </button>
+                </div>
+                <div class="shortcut-hints">
+                    <span class="hint-item"><kbd>Space</kbd> 撮影</span>
+                    <span class="hint-item"><kbd>Esc</kbd> ビューア閉じる</span>
+                    <span class="hint-item"><kbd>←</kbd><kbd>→</kbd> 画像送り</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- 右: 統計 + ギャラリー -->
+        <aside class="sidebar-section">
+
+            <!-- 統計パネル -->
+            <div class="card glass-card stats-card">
+                <div class="card-header">
+                    <h2>📊 検査統計</h2>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-item stat-ok">
+                        <div class="stat-value" id="stat-ok">{{ stats.ok }}</div>
+                        <div class="stat-label">OK</div>
+                    </div>
+                    <div class="stat-item stat-ng">
+                        <div class="stat-value" id="stat-ng">{{ stats.ng }}</div>
+                        <div class="stat-label">NG</div>
+                    </div>
+                    <div class="stat-item stat-unlabeled">
+                        <div class="stat-value" id="stat-unlabeled">{{ stats.unlabeled }}</div>
+                        <div class="stat-label">未分類</div>
+                    </div>
+                    <div class="stat-item stat-total">
+                        <div class="stat-value" id="stat-total">{{ stats.total }}</div>
+                        <div class="stat-label">合計</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 最近の撮影 -->
+            <div class="card glass-card gallery-card">
+                <div class="card-header">
+                    <h2>🖼️ 最近の撮影</h2>
+                </div>
+                <div class="gallery-grid" id="gallery-grid">
+                    {% for img in recent %}
+                    <div class="gallery-item" data-filepath="{{ img.filepath }}"
+                        onclick="openViewer('{{ img.filepath | replace('\\', '\\\\') }}')">
+                        <img src="/image?path={{ img.filepath | urlencode }}" alt="{{ img.filename }}" loading="lazy">
+                        <div class="gallery-label label-{{ img.label }}">{{ img.label | upper }}</div>
+                        <div class="gallery-actions">
+                            <button class="btn-label btn-ok"
+                                onclick="event.stopPropagation(); labelImage('{{ img.filepath | replace('\\', '\\\\') }}', 'ok')"
+                                title="OK判定">✓</button>
+                            <button class="btn-label btn-ng"
+                                onclick="event.stopPropagation(); labelImage('{{ img.filepath | replace('\\', '\\\\') }}', 'ng')"
+                                title="NG判定">✗</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% if not recent %}
+                    <div class="gallery-empty">
+                        <p>まだ撮影がありません</p>
+                        <p>「撮影」ボタンで画像をキャプチャしてください</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+        </aside>
+    </main>
+
+    <!-- ── 画像ビューアモーダル ── -->
+    <div class="viewer-overlay" id="viewer-overlay" onclick="closeViewer()">
+        <div class="viewer-container" onclick="event.stopPropagation()">
+            <button class="viewer-close" onclick="closeViewer()" title="閉じる (Esc)">✕</button>
+            <button class="viewer-nav viewer-prev" onclick="viewerNavigate(-1)" title="前の画像 (←)">‹</button>
+            <div class="viewer-image-wrap">
+                <img id="viewer-image" src="" alt="プレビュー">
+            </div>
+            <button class="viewer-nav viewer-next" onclick="viewerNavigate(1)" title="次の画像 (→)">›</button>
+            <div class="viewer-footer">
+                <div class="viewer-info">
+                    <span class="viewer-label" id="viewer-label"></span>
+                    <span class="viewer-filename" id="viewer-filename"></span>
+                    <span class="viewer-counter" id="viewer-counter"></span>
+                </div>
+                <div class="viewer-actions">
+                    <button class="btn btn-viewer-ok" onclick="viewerLabel('ok')">
+                        <span>✓</span> OK
+                    </button>
+                    <button class="btn btn-viewer-ng" onclick="viewerLabel('ng')">
+                        <span>✗</span> NG
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
