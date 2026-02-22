@@ -225,12 +225,19 @@ async function analyzeImage(filepath) {
     const aiScoreDiv = document.getElementById('ai-score-value');
     const aiLabelDiv = document.getElementById('ai-label-value');
     const btnAnalyze = document.getElementById('btn-analyze');
+    const btnHeatmap = document.getElementById('btn-heatmap');
+    const heatmapImg = document.getElementById('viewer-heatmap');
 
     if (!aiContainer || !btnAnalyze) return;
 
     btnAnalyze.disabled = true;
     btnAnalyze.innerHTML = '<span class="spinner-mini"></span> 分析中...';
     aiContainer.style.display = 'none';
+    if (btnHeatmap) btnHeatmap.style.display = 'none';
+    if (heatmapImg) {
+        heatmapImg.style.display = 'none';
+        heatmapImg.src = '';
+    }
 
     try {
         const response = await fetch('/api/predict', {
@@ -258,6 +265,14 @@ async function analyzeImage(filepath) {
                 aiLabelDiv.textContent = labelText;
                 aiLabelDiv.className = `ai-label-pill ${data.label}`;
             }
+
+            // ヒートマップ処理
+            if (data.heatmap && heatmapImg && btnHeatmap) {
+                heatmapImg.src = data.heatmap;
+                btnHeatmap.style.display = 'inline-block';
+                // デフォルトで表示しない、ボタンで切り替え
+                // heatmapImg.style.display = 'block'; 
+            }
         }
     } catch (e) {
         console.error(e);
@@ -265,6 +280,26 @@ async function analyzeImage(filepath) {
     } finally {
         btnAnalyze.disabled = false;
         btnAnalyze.innerHTML = '🤖 AI判定';
+    }
+}
+
+function toggleHeatmap() {
+    const heatmapImg = document.getElementById('viewer-heatmap');
+    const btnHeatmap = document.getElementById('btn-heatmap');
+    if (heatmapImg && heatmapImg.src) {
+        if (heatmapImg.style.display === 'none') {
+            heatmapImg.style.display = 'block';
+            if (btnHeatmap) {
+                btnHeatmap.style.background = '#e57373'; // lighter active state
+                btnHeatmap.textContent = '🔥 隠す';
+            }
+        } else {
+            heatmapImg.style.display = 'none';
+            if (btnHeatmap) {
+                btnHeatmap.style.background = '#ef5350';
+                btnHeatmap.textContent = '🔥 ヒートマップ';
+            }
+        }
     }
 }
 

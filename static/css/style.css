@@ -71,7 +71,6 @@ body {
         radial-gradient(ellipse at 80% 20%, rgba(120, 80, 255, 0.03) 0%, transparent 50%);
 }
 
-/* ── App Container ── */
 .app-container {
     max-width: 1440px;
     margin: 0 auto;
@@ -79,6 +78,22 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+}
+
+/* ── Operator Mode Overrides ── */
+.operator-mode .app-header {
+    display: none !important;
+}
+
+.operator-mode .main-grid {
+    grid-template-columns: minmax(auto, 1000px);
+    justify-content: center;
+    align-items: center;
+    flex: 1;
+}
+
+.operator-mode .preview-section {
+    width: 100%;
 }
 
 /* ── Header ── */
@@ -797,6 +812,40 @@ kbd {
     }
 }
 
+/* ── Heatmap Overlay & Spinner ── */
+.heatmap-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+    mix-blend-mode: normal;
+    z-index: 10;
+}
+
+.spinner-mini {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+    margin-right: 5px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ── Viewer Controls ── */
 .viewer-close {
     position: absolute;
     top: -40px;
@@ -823,6 +872,10 @@ kbd {
 }
 
 .viewer-image-wrap {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     border-radius: var(--radius-md);
     overflow: hidden;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);

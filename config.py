@@ -27,6 +27,16 @@ FLASK_HOST = "0.0.0.0"
 FLASK_PORT = 5000
 FLASK_DEBUG = True
 
+# ── Database 設定 ──
+SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(DATA_DIR, 'qc_check.db')}"
+SQLALCHEMY_TRACK_MODIFICATIONS = False
+
 # データフォルダを自動作成
 for d in [DATA_DIR, OK_DIR, NG_DIR, UNLABELED_DIR]:
     os.makedirs(d, exist_ok=True)
+
+# ── Cloud Vision API ──
+# Set your API keys here or use environment variables
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+

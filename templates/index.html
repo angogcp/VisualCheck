@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="app-container">
+<div class="app-container {% if mode == 'operator' %}operator-mode{% endif %}">
 
     <!-- ── ヘッダー ── -->
     <header class="app-header">
@@ -12,6 +12,16 @@
             </div>
         </div>
         <div class="header-right">
+            {% if mode != 'operator' %}
+            <button onclick="openSpecAnalysis()" class="btn"
+                style="background:rgba(255,255,255,0.05); color:var(--text-secondary); padding:8px 16px; font-size:0.85rem; border:1px solid var(--border-glass); margin-right:10px;">
+                📋 解析
+            </button>
+            <button onclick="openModelSettings()" class="btn"
+                style="background:rgba(255,255,255,0.05); color:var(--text-secondary); padding:8px 16px; font-size:0.85rem; border:1px solid var(--border-glass);">
+                ⚙️ AI設定
+            </button>
+            {% endif %}
             <div class="camera-status" id="camera-status">
                 <span class="status-dot"></span>
                 <span id="status-text">カメラ接続中...</span>
@@ -57,6 +67,7 @@
         </section>
 
         <!-- 右: 統計 + ギャラリー -->
+        {% if mode != 'operator' %}
         <aside class="sidebar-section">
 
             <!-- 統計パネル -->
@@ -64,6 +75,7 @@
                 <div class="card-header">
                     <h2>📊 検査統計</h2>
                 </div>
+                <!-- ... existing stats content ... -->
                 <div class="stats-grid">
                     <div class="stat-item stat-ok">
                         <div class="stat-value" id="stat-ok">{{ stats.ok }}</div>
@@ -115,6 +127,7 @@
             </div>
 
         </aside>
+        {% endif %}
     </main>
 
 

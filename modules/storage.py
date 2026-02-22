@@ -1,36 +1,63 @@
 """
 画像保存・管理モジュール
-Image storage and metadata management.
-Pure Python — no numpy/opencv dependencies.
+Image storage and metadata management using SQLAlchemy.
 """
 import base64
-import csv
-import io
 import os
 import shutil
-from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
+from sqlalchemy import func
 
 import config
+from modules.models import db, ImageRecord
 
+def init_db(app):
+    """Initialize DB and migrate CSV if it exists."""
+    db.init_app(app)
+    with app.app_context():
+        db.create_all()
+        # Optional: migrate CSV if we are starting fresh with DB but have CSV
+        migrate_csv_to_db()
+
+def migrate_csv_to_db():
+    """Migrate data from metadata.csv to SQLite if DB is empty."""
+    import csv
+    if not os.path.exists(config.METADATA_CSV):
+        return
+
+    # Check if DB is empty
+    if ImageRecord.query.first() is not None:
+        return
+
+    with open(config.METADATA_CSV, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        records = []
+        for row in reader:
+            try:
+                dt = datetime.fromisoformat(row.get("timestamp", ""))
+            except (ValueError, TypeError):
+                dt = datetime.utcnow()
+                
+            rec = ImageRecord(
+                timestamp=dt,
+                filename=row.get("filename", ""),
+                filepath=row.get("filepath", ""),
+                label=row.get("label", "unlabeled"),
+                cable_id=row.get("cable_id", ""),
+                file_size_bytes=int(row.get("file_size_bytes", 0) or 0)
+            )
+            records.append(rec)
+            
+        if records:
+            db.session.bulk_save_objects(records)
+            db.session.commit()
+            print(f"Migrated {len(records)} records from CSV to Database.")
 
 def save_image_from_base64(
     data_url: str,
     label: str = "unlabeled",
     cable_id: str = "",
 ) -> tuple[str, str]:
-    """
-    Base64 data URL から画像を保存し、メタデータCSVに記録する。
-
-    Args:
-        data_url: "data:image/jpeg;base64,..." or "data:image/png;base64,..."
-        label: "ok", "ng", "unlabeled"
-        cable_id: ケーブル識別ID
-
-    Returns:
-        (保存先ファイルパス, ファイル名)
-    """
-    # Base64デコード
     header, encoded = data_url.split(",", 1)
     image_data = base64.b64decode(encoded)
 
@@ -43,7 +70,7 @@ def save_image_from_base64(
     save_dir = _ensure_date_dir(base_dir)
 
     timestamp = datetime.now()
-    ts_str = timestamp.strftime("%Y%m%d_%H%M%S_%f")[:-3]
+    ts_str = timestamp.strftime("%Y-%m-%d_%H-%M-%S")
     cable_part = f"_{cable_id}" if cable_id else ""
     filename = f"{ts_str}{cable_part}.jpg"
     filepath = os.path.join(save_dir, filename)
@@ -52,53 +79,28 @@ def save_image_from_base64(
         f.write(image_data)
 
     file_size = len(image_data)
-    _append_metadata(timestamp, filepath, filename, label, cable_id, file_size)
+    
+    # Save to DB
+    record = ImageRecord(
+        timestamp=timestamp,
+        filename=filename,
+        filepath=filepath,
+        label=label,
+        cable_id=cable_id,
+        file_size_bytes=file_size
+    )
+    db.session.add(record)
+    db.session.commit()
 
     return filepath, filename
 
-
 def _ensure_date_dir(base_dir: str) -> str:
-    """日付別サブフォルダを作成して返す"""
     date_str = datetime.now().strftime("%Y%m%d")
     path = os.path.join(base_dir, date_str)
     os.makedirs(path, exist_ok=True)
     return path
 
-
-def _append_metadata(
-    timestamp: datetime,
-    filepath: str,
-    filename: str,
-    label: str,
-    cable_id: str,
-    file_size: int,
-):
-    """メタデータCSVに1行追加する"""
-    csv_exists = os.path.exists(config.METADATA_CSV)
-    with open(config.METADATA_CSV, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        if not csv_exists:
-            writer.writerow([
-                "timestamp", "filename", "filepath", "label",
-                "cable_id", "file_size_bytes",
-            ])
-        writer.writerow([
-            timestamp.isoformat(),
-            filename,
-            filepath,
-            label,
-            cable_id,
-            file_size,
-        ])
-
-
 def relabel_image(filepath: str, new_label: str) -> str:
-    """
-    既存画像のラベルを変更する（ファイルを移動）。
-
-    Returns:
-        新しいファイルパス
-    """
     label_dirs = {
         "ok": config.OK_DIR,
         "ng": config.NG_DIR,
@@ -112,81 +114,40 @@ def relabel_image(filepath: str, new_label: str) -> str:
     if os.path.exists(filepath):
         shutil.move(filepath, new_path)
 
-    _update_csv_label(filename, new_label, new_path)
+    # Update DB
+    record = ImageRecord.query.filter_by(filename=filename).first()
+    if record:
+        record.label = new_label
+        record.filepath = new_path
+        db.session.commit()
+
     return new_path
 
-
-def _update_csv_label(filename: str, new_label: str, new_path: str):
-    """CSVファイルの該当行ラベルを更新"""
-    if not os.path.exists(config.METADATA_CSV):
-        return
-
-    rows = []
-    with open(config.METADATA_CSV, "r", encoding="utf-8") as f:
-        reader = csv.reader(f)
-        for row in reader:
-            if len(row) >= 4 and row[1] == filename:
-                row[2] = new_path
-                row[3] = new_label
-            rows.append(row)
-
-    with open(config.METADATA_CSV, "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerows(rows)
-
-
 def delete_image(filepath: str) -> bool:
-    """
-    画像ファイルを削除し、CSVから該当行を除去する。
-
-    Returns:
-        削除成功: True
-    """
     filename = os.path.basename(filepath)
 
-    # ファイル削除
     if os.path.exists(filepath):
-        os.remove(filepath)
+        try:
+            os.remove(filepath)
+        except Exception:
+            pass
 
-    # CSV から該当行を削除
-    if os.path.exists(config.METADATA_CSV):
-        rows = []
-        with open(config.METADATA_CSV, "r", encoding="utf-8") as f:
-            reader = csv.reader(f)
-            for row in reader:
-                if len(row) >= 2 and row[1] == filename:
-                    continue  # この行をスキップ
-                rows.append(row)
-        with open(config.METADATA_CSV, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerows(rows)
+    # Delete from DB
+    record = ImageRecord.query.filter_by(filename=filename).first()
+    if record:
+        db.session.delete(record)
+        db.session.commit()
 
     return True
 
-
 def get_recent_images(n: int = 20) -> list[dict]:
-    """最近の撮影画像をn件取得する"""
-    if not os.path.exists(config.METADATA_CSV):
-        return []
-
-    rows = []
-    with open(config.METADATA_CSV, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            rows.append(row)
-
-    recent = rows[-n:]
-    recent.reverse()
-
+    records = ImageRecord.query.order_by(ImageRecord.timestamp.desc()).limit(n).all()
     result = []
-    for row in recent:
-        fp = row.get("filepath", "")
-        if os.path.exists(fp):
-            row["exists"] = True
-            result.append(row)
-
+    for r in records:
+        data = r.to_dict()
+        if os.path.exists(data["filepath"]):
+            result.append(data)
     return result
-
 
 def get_filtered_images(
     label: str = "",
@@ -194,110 +155,82 @@ def get_filtered_images(
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
-    """
-    フィルタ付きで画像を取得する。
+    query = ImageRecord.query
 
-    Args:
-        label: "ok", "ng", "unlabeled", "" (all)
-        cable_id: ケーブルIDで部分一致検索
-        limit: 取得件数
-        offset: オフセット
-
-    Returns:
-        {"images": [...], "total": int, "has_more": bool}
-    """
-    if not os.path.exists(config.METADATA_CSV):
-        return {"images": [], "total": 0, "has_more": False}
-
-    all_rows = []
-    with open(config.METADATA_CSV, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            # ラベルフィルタ
-            if label and row.get("label", "") != label:
-                continue
-            # ケーブルIDフィルタ（部分一致）
-            if cable_id and cable_id.lower() not in row.get("cable_id", "").lower():
-                continue
-            # ファイル存在チェック
-            fp = row.get("filepath", "")
-            if os.path.exists(fp):
-                row["exists"] = True
-                all_rows.append(row)
-
-    # 新しい順に並べ替え
-    all_rows.reverse()
-    total = len(all_rows)
-    page = all_rows[offset:offset + limit]
-
+    if label:
+        query = query.filter_by(label=label)
+    if cable_id:
+        query = query.filter(ImageRecord.cable_id.ilike(f"%{cable_id}%"))
+        
+    total = query.count()
+    records = query.order_by(ImageRecord.timestamp.desc()).offset(offset).limit(limit).all()
+    
+    images = []
+    for r in records:
+        data = r.to_dict()
+        if os.path.exists(data["filepath"]):
+            images.append(data)
+            
     return {
-        "images": page,
+        "images": images,
         "total": total,
         "has_more": (offset + limit) < total,
     }
 
-
 def get_statistics() -> dict:
-    """OK / NG / 未分類 の統計を返す"""
     stats = {"ok": 0, "ng": 0, "unlabeled": 0, "total": 0}
-
-    if not os.path.exists(config.METADATA_CSV):
-        return stats
-
-    with open(config.METADATA_CSV, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            label = row.get("label", "unlabeled")
-            if label in stats:
-                stats[label] += 1
-            stats["total"] += 1
-
+    
+    results = db.session.query(ImageRecord.label, func.count(ImageRecord.id)).group_by(ImageRecord.label).all()
+    for label, count in results:
+        if label in stats:
+            stats[label] = count
+        stats["total"] += count
+        
     return stats
 
-
 def get_daily_statistics(days: int = 30) -> list[dict]:
-    """
-    日別の検査統計を返す（直近n日間）。
-
-    Returns:
-        [{"date": "2026-02-14", "ok": 5, "ng": 2, "unlabeled": 1, "total": 8}, ...]
-    """
-    if not os.path.exists(config.METADATA_CSV):
-        return []
-
+    # Since sqlite dates can be tricky, we'll fetch recently and aggregate in python 
+    # for simplicity across different DB dialects right now.
+    from datetime import timedelta
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    
+    records = ImageRecord.query.filter(ImageRecord.timestamp >= cutoff).all()
+    
+    from collections import defaultdict
     daily = defaultdict(lambda: {"ok": 0, "ng": 0, "unlabeled": 0, "total": 0})
-
-    with open(config.METADATA_CSV, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            ts_str = row.get("timestamp", "")
-            label = row.get("label", "unlabeled")
-            try:
-                dt = datetime.fromisoformat(ts_str)
-                date_key = dt.strftime("%Y-%m-%d")
-            except (ValueError, TypeError):
-                continue
-
-            if label in daily[date_key]:
-                daily[date_key][label] += 1
-            daily[date_key]["total"] += 1
-
-    # 直近n日分を日付順にソート
-    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    
+    for r in records:
+        date_key = r.timestamp.strftime("%Y-%m-%d")
+        if r.label in daily[date_key]:
+            daily[date_key][r.label] += 1
+        daily[date_key]["total"] += 1
+        
     result = []
     for date_key in sorted(daily.keys(), reverse=True):
-        if date_key >= cutoff:
-            entry = {"date": date_key}
-            entry.update(daily[date_key])
-            result.append(entry)
-
+        entry = {"date": date_key}
+        entry.update(daily[date_key])
+        result.append(entry)
+        
     return result
 
-
 def export_csv_content() -> str:
-    """メタデータCSVの内容を文字列で返す"""
-    if not os.path.exists(config.METADATA_CSV):
-        return ""
-    with open(config.METADATA_CSV, "r", encoding="utf-8") as f:
-        return f.read()
-
+    import io
+    import csv
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "timestamp", "filename", "filepath", "label",
+        "cable_id", "file_size_bytes",
+    ])
+    
+    for r in ImageRecord.query.order_by(ImageRecord.timestamp.asc()).all():
+        writer.writerow([
+            r.timestamp.isoformat(),
+            r.filename,
+            r.filepath,
+            r.label,
+            r.cable_id,
+            r.file_size_bytes
+        ])
+        
+    return output.getvalue()

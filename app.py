@@ -8,6 +8,7 @@ This avoids numpy/opencv dependency issues with Python 3.15.
 """
 import os
 
+import base64
 from flask import (
     Flask, render_template, request, jsonify,
     send_file, Response,
@@ -29,9 +30,15 @@ from modules.storage import (
     get_statistics,
     get_daily_statistics,
     export_csv_content,
+    init_db
 )
 
 app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = config.SQLALCHEMY_DATABASE_URI
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = config.SQLALCHEMY_TRACK_MODIFICATIONS
+
+# Initialize the SQLite database and migrate old CSV data if needed
+init_db(app)
 
 
 # ── ページルート ──
@@ -39,6 +46,7 @@ app = Flask(__name__)
 @app.route("/")
 def index():
     """メイン画面（キャプチャ）"""
+    mode = request.args.get("mode", "admin")
     stats = get_statistics()
     recent = get_recent_images(12)
     return render_template(
@@ -46,6 +54,7 @@ def index():
         stats=stats,
         recent=recent,
         active_page="capture",
+        mode=mode,
     )
 
 
@@ -225,6 +234,31 @@ def serve_image():
     return send_file(abs_path, mimetype=mimetype)
 
 
+# ── ERP REST APIs ──
+
+@app.route("/api/v1/inspections", methods=["GET"])
+def erp_get_inspections():
+    """ERP用: 検査履歴の取得（フィルタリング可能）"""
+    label_filter = request.args.get("label", "")
+    cable_id = request.args.get("cable_id", "")
+    limit = request.args.get("limit", 100, type=int)
+    offset = request.args.get("offset", 0, type=int)
+
+    result = get_filtered_images(
+        label=label_filter,
+        cable_id=cable_id,
+        limit=limit,
+        offset=offset,
+    )
+    return jsonify(result)
+
+@app.route("/api/v1/inspections/stats", methods=["GET"])
+def erp_get_inspections_stats():
+    """ERP用: 全体統計の取得"""
+    stats = get_statistics()
+    return jsonify(stats)
+
+
 # ── AI Routes ──
 
 @app.route('/api/predict', methods=['POST'])
@@ -256,13 +290,15 @@ def train_endpoint():
         if training_active:
             return jsonify({"status": "error", "message": "Training already in progress"}), 409
         training_active = True
-        
+    
+    data = request.json or {}
+    model_type = data.get('model_type', 'patchcore')
+
     def train_task():
         global training_active
         try:
-            print("Training started...")
-            # Use small count for quick testing if in dev mode, or default
-            result = ai_engine.train()
+            print(f"Training started ({model_type})...")
+            result = ai_engine.train(model_type=model_type)
             print(f"Training finished: {result}")
         except Exception as e:
             print(f"Training failed: {e}")
@@ -274,19 +310,130 @@ def train_endpoint():
     thread.daemon = True
     thread.start()
     
-    return jsonify({"status": "started", "message": "Training started in background"})
+    return jsonify({"status": "started", "message": f"{model_type} training started in background"})
 
 @app.route('/api/training-status')
 def training_status():
     global training_active
     return jsonify({"active": training_active})
 
+@app.route('/api/models')
+def list_models():
+    """List available model types and their status."""
+    return jsonify(ai_engine.get_available_models())
+
+@app.route('/api/versions')
+def list_versions():
+    """List all trained versions for a model type."""
+    model_type = request.args.get('model_type', 'patchcore')
+    versions = ai_engine.list_versions(model_type)
+    current = ai_engine._get_current_version(model_type)
+    return jsonify({"model_type": model_type, "current": current, "versions": versions})
+
+@app.route('/api/rollback', methods=['POST'])
+def rollback():
+    """Rollback to a specific model version."""
+    data = request.json or {}
+    version = data.get('version')
+    model_type = data.get('model_type', 'patchcore')
+    if not version:
+        return jsonify({"error": "version required"}), 400
+    result = ai_engine.rollback_to_version(version, model_type)
+    if result.get("success"):
+        return jsonify(result)
+    return jsonify(result), 400
+
+
+
+# ── Design Spec Analysis ──
+
+from modules.vlm import analyze_spec
+from modules.cost import calculate_estimate
+import tempfile
+
+@app.route("/api/analyze-spec", methods=["POST"])
+def analyze_spec_endpoint():
+    """デザイン仕様書画像を解析して構成要素を抽出"""
+    data = request.json or {}
+    image_data = data.get("image", "") # Base64 string
+    
+    if not image_data:
+        return jsonify({"error": "No image data provided"}), 400
+        
+    try:
+        # Save temp file for Gemini
+        header, encoded = image_data.split(",", 1)
+        decoded = base64.b64decode(encoded)
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+            tmp.write(decoded)
+            tmp_path = tmp.name
+            
+        result = analyze_spec(tmp_path)
+        os.unlink(tmp_path) # Clean up
+        
+        if "error" in result:
+            return jsonify(result), 500
+            
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/estimate-cost", methods=["POST"])
+def estimate_cost_endpoint():
+    """構成要素からコスト試算"""
+    data = request.json or {}
+    components = data.get("components", [])
+    
+    if not components:
+        return jsonify({"error": "No components provided"}), 400
+        
+    estimate = calculate_estimate(components)
+    return jsonify(estimate)
+
+
+# ── Auto-Retraining Scheduler ──
+from apscheduler.schedulers.background import BackgroundScheduler
+import atexit
+import datetime
+from modules.models import ImageRecord
+
+def scheduled_retraining():
+    """Nightly job: Check if new OK images were added today and retrain the model."""
+    with app.app_context():
+        # Check if any new "ok" images were added since midnight
+        today = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        new_oks = ImageRecord.query.filter(ImageRecord.label == 'ok', ImageRecord.timestamp >= today).count()
+        
+        if new_oks > 0:
+            print(f"[MLOps] Found {new_oks} new OK images today. Starting nightly retraining...")
+            global training_active
+            with training_lock:
+                if not training_active:
+                    training_active = True
+                    try:
+                        ai_engine.train(model_type='patchcore')
+                        print("[MLOps] Nightly retraining completed.")
+                    except Exception as e:
+                        print(f"[MLOps] Nightly retraining failed: {e}")
+                    finally:
+                        training_active = False
+        else:
+            print("[MLOps] No new OK images today. Skipping retraining.")
+
+scheduler = BackgroundScheduler()
+# Run every day at 2:00 AM
+scheduler.add_job(func=scheduled_retraining, trigger="cron", hour=2, minute=0)
+scheduler.start()
+atexit.register(lambda: scheduler.shutdown())
+
 
 # ── 起動 ──
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("  QC-Check 02 — 画像検査キャプチャステーション")
+    print("  QC-Check 02 - 画像検査キャプチャステーション")
     print("=" * 50)
     print(f"  データ保存先: {config.DATA_DIR}")
     print(f"  サーバー: http://localhost:{config.FLASK_PORT}")

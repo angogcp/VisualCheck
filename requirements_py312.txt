@@ -1,0 +1,15 @@
+numpy
+opencv-python
+Pillow
+kivy
+kivymd
+scikit-learn
+cryptography
+torch
+torchvision
+onnx
+onnxruntime
+ftfy
+regex
+tqdm
+requests
